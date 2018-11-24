@@ -101,5 +101,5 @@ ENV/
 .mypy_cache/
 
 # the local data folder
-./data
-./scripts
+data
+scripts
