@@ -102,4 +102,6 @@ ENV/
 
 # the local data folder
 data
-scripts
+logs
+saved_models
+.vscode

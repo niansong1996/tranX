@@ -656,6 +656,8 @@ if __name__ == '__main__':
     print(args, file=sys.stderr)
     if args.mode == 'train':
         train(args)
+    elif args.mode == 'train_reconstructor':
+        train_decoder(args)
     elif args.mode == 'self_train':
         self_training(args)
     elif args.mode == 'test':
