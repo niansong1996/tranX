@@ -10,7 +10,7 @@ import time
 import os
 import sys
 
-import tqdm
+from tqdm import tqdm
 
 import torch
 from torch.autograd import Variable
