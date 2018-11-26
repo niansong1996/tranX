@@ -15,6 +15,7 @@ from torch.autograd import Variable
 
 import evaluation
 from asdl.asdl import ASDLGrammar
+from nltk.translate.bleu_score import corpus_bleu
 from asdl.transition_system import TransitionSystem
 from components.dataset import Dataset, Example
 from model import nn_utils
@@ -37,7 +38,7 @@ def init_arg_parser():
 
     arg_parser.add_argument('--asdl_file', type=str, help='Path to ASDL grammar specification')
     arg_parser.add_argument('--mode', choices=['train', 'self_train', 'train_reconstructor',
-                                               'test', 'rerank',], default='train', help='Run mode')
+                                               'test', 'test_reconstructor', 'rerank',], default='train', help='Run mode')
 
     #### Model configuration ####
     arg_parser.add_argument('--lstm', choices=['lstm'], default='lstm', help='Type of LSTM used, currently only standard LSTM cell is supported')
@@ -650,6 +651,44 @@ def test(args):
         pickle.dump(decode_results, open(args.save_decode_to, 'wb'))
 
 
+def test_decoder(args):
+    test_set = Dataset.from_bin_file(args.test_file)
+    assert args.load_model
+
+    print('load model from [%s]' % args.load_model, file=sys.stderr)
+    params = torch.load(args.load_model, map_location=lambda storage, loc: storage)
+    vocab = params['vocab']
+    transition_system = params['transition_system']
+    saved_args = params['args']
+    saved_state = params['state_dict']
+    saved_args.cuda = args.cuda
+    # set the correct domain from saved arg
+    args.lang = saved_args.lang
+
+    update_args(saved_args)
+
+    parser = Reconstructor(saved_args, vocab, transition_system)
+
+    parser.load_state_dict(saved_state)
+
+    if args.cuda: parser = parser.cuda()
+    parser.eval()
+
+    all_code = test_set.all_targets
+    all_gold_nl = test_set.all_source
+    all_hyp_nl = []
+    # decode code to nl utterance
+    for code in all_code:
+        nl_hyps = parser.sample(code)
+        all_hyp_nl.append(nl_hyps[0])
+
+    bleu_score = corpus_bleu([[ref] for ref in all_gold_nl], all_hyp_nl)
+
+    print('BLEU for reconstruction: %.2f' % (bleu_score*100.0), file=sys.stderr)
+    if args.save_decode_to:
+        pickle.dump(all_hyp_nl, open(args.save_decode_to, 'wb'))
+
+
 if __name__ == '__main__':
     arg_parser = init_arg_parser()
     args = init_config()
@@ -662,5 +701,7 @@ if __name__ == '__main__':
         self_training(args)
     elif args.mode == 'test':
         test(args)
+    elif args.mode == 'test_reconstructor':
+        test_decoder(args)
     else:
         raise RuntimeError('unknown mode')
