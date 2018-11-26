@@ -34,6 +34,6 @@ def reconstructor_augmentation(args, labeled_examples, unlabeled_examples, model
     assert len(dev)==len(test)==0
 
     # derive the final train set
-    train_set = Dataset(labeled_examples + augmented_unlabel_examples)
+    train_set = labeled_examples + augmented_unlabel_examples
 
     return train_set, vocab

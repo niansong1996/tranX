@@ -43,6 +43,7 @@ python exp.py \
     --lr_decay ${lr_decay} \
     --beam_size ${beam_size} \
     --log_every 50 \
+    --label_sample_ratio 0.5 \
     --save_to saved_models/django/${model_name} 2>logs/django/${model_name}.log
 
 

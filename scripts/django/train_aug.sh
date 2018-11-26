@@ -4,7 +4,7 @@ source activate py2torch3cuda9
 
 seed=${1:-0}
 vocab="vocab.freq5.bin"
-train_file="train.bin"
+train_file="train_aug_reconstructor.bin"
 dev_file="dev.bin"
 dropout=0.3
 hidden_size=256
@@ -17,7 +17,7 @@ lr=0.001
 lr_decay=0.5
 beam_size=15
 lstm='lstm'  # lstm
-model_name=model.semi.django.${lstm}.hidden${hidden_size}.embed${embed_size}.action${action_embed_size}.field${field_embed_size}.type${type_embed_size}.dropout${dropout}.lr${lr}.lr_decay${lr_decay}.beam_size${beam_size}.${vocab}.${train_file}.glorot.par_state_w_field_embed.seed${seed}
+model_name=model.aug.reconstructor.django.${lstm}.hidden${hidden_size}.embed${embed_size}.action${action_embed_size}.field${field_embed_size}.type${type_embed_size}.dropout${dropout}.lr${lr}.lr_decay${lr_decay}.beam_size${beam_size}.${vocab}.${train_file}.glorot.par_state_w_field_embed.seed${seed}
 
 python exp.py \
     --seed ${seed} \
@@ -46,9 +46,6 @@ python exp.py \
     --log_every 50 \
     --save_to saved_models/django/${model_name} \
     --label_sample_ratio 0.5 2>logs/django/${model_name}.log
-#    --augmentation 'reconstructor'
-#    --load_augmentation_model 'model.bin'
-
 
 #     --no_parent_state \
 
