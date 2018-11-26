@@ -11,9 +11,12 @@ import os
 import sys
 
 from tqdm import tqdm
+from asdl.lang.py.dataset import Django
 
 import torch
 from torch.autograd import Variable
+
+from augmentation import reconstructor_augmentation
 
 import evaluation
 from asdl.asdl import ASDLGrammar
@@ -40,7 +43,7 @@ def init_arg_parser():
 
     arg_parser.add_argument('--asdl_file', type=str, help='Path to ASDL grammar specification')
     arg_parser.add_argument('--mode', choices=['train', 'self_train', 'train_reconstructor',
-                                               'test', 'test_reconstructor', 'rerank',], default='train', help='Run mode')
+                                               'test', 'test_reconstructor', 'rerank', 'augmentation'], default='train', help='Run mode')
 
     #### Model configuration ####
     arg_parser.add_argument('--lstm', choices=['lstm'], default='lstm', help='Type of LSTM used, currently only standard LSTM cell is supported')
@@ -175,12 +178,14 @@ def get_parser_class(lang):
         raise ValueError('unknown parser class for %s' % lang)
 
 
-def process_train_set(train_set, args):
+def augmentation(args):
+    train_set = Dataset.from_bin_file(args.train_file)
     num_labeled_examples = int(len(train_set)*args.label_sample_ratio)
     labeled_examples = train_set.examples[:num_labeled_examples]
     unlabeled_examples = train_set.examples[num_labeled_examples:]
 
     if args.augmentation == 'reconstructor':
+        print('Using reconstructor as augmentation...')
         print('load reconstructor model from [%s]' % args.load_augmentation_model, file=sys.stderr)
         params = torch.load(args.load_augmentation_model, map_location=lambda storage, loc: storage)
         vocab = params['vocab']
@@ -198,33 +203,23 @@ def process_train_set(train_set, args):
         if args.cuda: parser = parser.cuda()
         parser.eval()
 
-        all_code = [e.tgt_code for e in unlabeled_examples]
-        all_gold_nl = [e.src_sent for e in unlabeled_examples]
-        all_hyp_nl = []
-        # decode code to nl utterance
-        for code in tqdm(all_code):
-            nl_hyps = parser.sample(code)
-            all_hyp_nl.append(nl_hyps[0])
-
-        bleu_score = corpus_bleu([[ref] for ref in all_gold_nl], all_hyp_nl)
-        print('reconstructed BLEU %.2f' % (bleu_score*100.0), file=sys.stderr)
-
-        for i,e in enumerate(unlabeled_examples):
-            unlabeled_examples[i].src_sent = all_hyp_nl[i]
-
-        train_set = Dataset(labeled_examples+unlabeled_examples)
+        # get the reconstructed dataset 
+        aug_train_set, vocab = reconstructor_augmentation(args, labeled_examples, unlabeled_examples, parser)
     else:
         print('No augmentation is used...', file=sys.stderr)
-        train_set = Dataset(labeled_examples)
+        aug_train_set = Dataset(labeled_examples)
+        pass
 
-    return train_set
+    pickle.dump(aug_train_set, open('data/django/train_aug_%s.bin' % args.augmentation, 'w'))
+    pickle.dump(vocab, open('data/django/vocab_aug_%s.bin' % args.augmentation, 'w'))
+
 
 def train(args):
     """Maximum Likelihood Estimation"""
 
     grammar = ASDLGrammar.from_text(open(args.asdl_file).read())
     transition_system = TransitionSystem.get_class_by_lang(args.lang)(grammar)
-    train_set = process_train_set(Dataset.from_bin_file(args.train_file), args)
+    train_set = Dataset.from_bin_file(args.train_file)
 
     if args.dev_file:
         dev_set = Dataset.from_bin_file(args.dev_file)
@@ -755,5 +750,7 @@ if __name__ == '__main__':
         test(args)
     elif args.mode == 'test_reconstructor':
         test_decoder(args)
+    elif args.mode == 'augmentation':
+        augmentation(args)
     else:
         raise RuntimeError('unknown mode')

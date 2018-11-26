@@ -10,6 +10,7 @@ import nltk
 import sys
 
 import numpy as np
+from tqdm import tqdm
 
 from asdl.asdl_ast import RealizedField
 from asdl.lang.py.py_asdl_helper import python_ast_to_asdl_ast, asdl_ast_to_python_ast
@@ -145,13 +146,16 @@ class Django(object):
         return query, str_map
 
     @staticmethod
-    def canonicalize_example(query, code):
+    def canonicalize_example(query, code, ignore_code=False):
 
         canonical_query, str_map = Django.canonicalize_query(query)
         query_tokens = canonical_query.split(' ')
 
-        canonical_code = Django.canonicalize_code(code)
-        ast_tree = ast.parse(canonical_code)
+        if ignore_code:
+            ast_tree = ast.parse(code)
+        else:
+            canonical_code = Django.canonicalize_code(code)
+            ast_tree = ast.parse(canonical_code)
 
         Django.canonicalize_str_nodes(ast_tree, str_map)
         canonical_code = astor.to_source(ast_tree)
@@ -192,7 +196,8 @@ class Django(object):
         return query_tokens, canonical_code, str_map
 
     @staticmethod
-    def parse_django_dataset(annot_file, code_file, asdl_file_path, max_query_len=70, vocab_freq_cutoff=10):
+    def parse_django_dataset(annot_file, code_file, asdl_file_path, max_query_len=70, 
+                            vocab_freq_cutoff=10, verbose=True, direct=False, ignore_code=False):
         asdl_text = open(asdl_file_path).read()
         grammar = ASDLGrammar.from_text(asdl_text)
         transition_system = PythonTransitionSystem(grammar)
@@ -202,25 +207,33 @@ class Django(object):
         from components.vocab import Vocab, VocabEntry
         from components.dataset import Example
 
-        for idx, (src_query, tgt_code) in enumerate(zip(open(annot_file), open(code_file))):
+        if direct:
+            annot = annot_file
+            code = code_file
+        else:
+            annot = open(annot_file)
+            code = open(code_file)
+
+        for idx, (src_query, tgt_code) in tqdm(enumerate(zip(annot, code))):
             src_query = src_query.strip()
             tgt_code = tgt_code.strip()
 
-            src_query_tokens, tgt_canonical_code, str_map = Django.canonicalize_example(src_query, tgt_code)
+            src_query_tokens, tgt_canonical_code, str_map = Django.canonicalize_example(src_query, tgt_code, ignore_code=ignore_code)
             python_ast = ast.parse(tgt_canonical_code).body[0]
             gold_source = astor.to_source(python_ast).strip()
             tgt_ast = python_ast_to_asdl_ast(python_ast, grammar)
             tgt_actions = transition_system.get_actions(tgt_ast)
 
-            print('+' * 60)
-            print('Example: %d' % idx)
-            print('Source: %s' % ' '.join(src_query_tokens))
-            if str_map:
-                print('Original String Map:')
-                for str_literal, str_repr in str_map.items():
-                    print('\t%s: %s' % (str_literal, str_repr))
-            print('Code:\n%s' % gold_source)
-            print('Actions:')
+            if verbose:
+                print('+' * 60)
+                print('Example: %d' % idx)
+                print('Source: %s' % ' '.join(src_query_tokens))
+                if str_map:
+                    print('Original String Map:')
+                    for str_literal, str_repr in str_map.items():
+                        print('\t%s: %s' % (str_literal, str_repr))
+                print('Code:\n%s' % gold_source)
+                print('Actions:')
 
             # sanity check
             hyp = Hypothesis()
@@ -234,8 +247,8 @@ class Django(object):
                 if hyp.frontier_node:
                     p_t = hyp.frontier_node.created_time
                     f_t = hyp.frontier_field.field.__repr__(plain=True)
-
-                print('\t[%d] %s, frontier field: %s, parent: %d' % (t, action, f_t, p_t))
+                if verbose:
+                    print('\t[%d] %s, frontier field: %s, parent: %d' % (t, action, f_t, p_t))
                 hyp = hyp.clone_and_apply_action(action)
 
             assert hyp.frontier_node is None and hyp.frontier_field is None
@@ -243,7 +256,8 @@ class Django(object):
             src_from_hyp = astor.to_source(asdl_ast_to_python_ast(hyp.tree, grammar)).strip()
             assert src_from_hyp == gold_source
 
-            print('+' * 60)
+            if verbose:
+                print('+' * 60)
 
             loaded_examples.append({'src_query_tokens': src_query_tokens,
                                     'tgt_canonical_code': gold_source,
