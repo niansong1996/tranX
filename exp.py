@@ -10,6 +10,8 @@ import time
 import os
 import sys
 
+import tqdm
+
 import torch
 from torch.autograd import Variable
 
@@ -200,7 +202,7 @@ def process_train_set(train_set, args):
         all_gold_nl = [e.src_sent for e in unlabeled_examples]
         all_hyp_nl = []
         # decode code to nl utterance
-        for code in all_code:
+        for code in tqdm(all_code):
             nl_hyps = parser.sample(code)
             all_hyp_nl.append(nl_hyps[0])
 
