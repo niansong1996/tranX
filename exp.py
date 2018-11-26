@@ -135,6 +135,12 @@ def init_arg_parser():
     arg_parser.add_argument('--unsup_loss_weight', default=1., type=float, help='loss of unsupervised learning weight')
     arg_parser.add_argument('--unlabeled_file', type=str, help='Path to the training source file used in semi-supervised self-training')
 
+    #### semi-supervised-training ####
+    arg_parser.add_argument('--augmentation', default=None, type=str)
+    arg_parser.add_argument('--label_sample_ratio', default=1., type=float, help='the percentage of labeled examples to use')
+    arg_parser.add_argument('--load_augmentation_model', default=None, type=str, help='Load a pre-trained augmentation model')
+
+
     return arg_parser
 
 
@@ -167,12 +173,56 @@ def get_parser_class(lang):
         raise ValueError('unknown parser class for %s' % lang)
 
 
+def process_train_set(train_set, args):
+    num_labeled_examples = int(len(train_set)*args.label_sample_ratio)
+    labeled_examples = train_set.examples[:num_labeled_examples]
+    unlabeled_examples = train_set.examples[num_labeled_examples:]
+
+    if args.augmentation == 'reconstructor':
+        print('load reconstructor model from [%s]' % args.load_augmentation_model, file=sys.stderr)
+        params = torch.load(args.load_augmentation_model, map_location=lambda storage, loc: storage)
+        vocab = params['vocab']
+        transition_system = params['transition_system']
+        saved_args = params['args']
+        saved_state = params['state_dict']
+        saved_args.cuda = args.cuda
+        # set the correct domain from saved arg
+        args.lang = saved_args.lang
+        update_args(saved_args)
+
+        parser = Reconstructor(saved_args, vocab, transition_system)
+        parser.load_state_dict(saved_state)
+
+        if args.cuda: parser = parser.cuda()
+        parser.eval()
+
+        all_code = [e.tgt_code for e in unlabeled_examples]
+        all_gold_nl = [e.src_sent for e in unlabeled_examples]
+        all_hyp_nl = []
+        # decode code to nl utterance
+        for code in all_code:
+            nl_hyps = parser.sample(code)
+            all_hyp_nl.append(nl_hyps[0])
+
+        bleu_score = corpus_bleu([[ref] for ref in all_gold_nl], all_hyp_nl)
+        print('reconstructed BLEU %.2f' % (bleu_score*100.0), file=sys.stderr)
+
+        for i,e in enumerate(unlabeled_examples):
+            unlabeled_examples[i].src_sent = all_hyp_nl[i]
+
+        train_set = Dataset(labeled_examples+unlabeled_examples)
+    else:
+        print('No augmentation is used...', file=sys.stderr)
+        train_set = Dataset(labeled_examples)
+
+    return train_set
+
 def train(args):
     """Maximum Likelihood Estimation"""
 
     grammar = ASDLGrammar.from_text(open(args.asdl_file).read())
     transition_system = TransitionSystem.get_class_by_lang(args.lang)(grammar)
-    train_set = Dataset.from_bin_file(args.train_file)
+    train_set = process_train_set(Dataset.from_bin_file(args.train_file), args)
 
     if args.dev_file:
         dev_set = Dataset.from_bin_file(args.dev_file)
