@@ -20,6 +20,7 @@ lstm='lstm'  # lstm
 model_name=model.reconstructor.django.${lstm}.hidden${hidden_size}.embed${embed_size}.action${action_embed_size}.field${field_embed_size}.type${type_embed_size}.dropout${dropout}.lr${lr}.lr_decay${lr_decay}.beam_size${beam_size}.${vocab}.${train_file}.glorot.par_state_w_field_embed.seed${seed}
 
 python exp.py \
+    --cuda \
     --seed ${seed} \
     --mode train_reconstructor \
     --batch_size 10 \

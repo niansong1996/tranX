@@ -44,8 +44,7 @@ python exp.py \
     --lr_decay ${lr_decay} \
     --beam_size ${beam_size} \
     --log_every 50 \
-    --save_to saved_models/django/${model_name} \
-    --label_sample_ratio 0.5 2>logs/django/${model_name}.log
+    --save_to saved_models/django/${model_name} 2>logs/django/${model_name}.log
 
 #     --no_parent_state \
 

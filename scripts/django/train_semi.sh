@@ -46,9 +46,6 @@ python exp.py \
     --log_every 50 \
     --save_to saved_models/django/${model_name} \
     --label_sample_ratio 0.5 2>logs/django/${model_name}.log
-#    --augmentation 'reconstructor'
-#    --load_augmentation_model 'model.bin'
-
 
 #     --no_parent_state \
 

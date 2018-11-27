@@ -220,6 +220,8 @@ def train(args):
     grammar = ASDLGrammar.from_text(open(args.asdl_file).read())
     transition_system = TransitionSystem.get_class_by_lang(args.lang)(grammar)
     train_set = Dataset.from_bin_file(args.train_file)
+    num_labeled_examples = int(len(train_set)*args.label_sample_ratio)
+    train_set = Dataset(train_set.examples[:num_labeled_examples])
 
     if args.dev_file:
         dev_set = Dataset.from_bin_file(args.dev_file)
@@ -252,7 +254,7 @@ def train(args):
         glove_embedding = GloveHelper(args.glove_embed_path)
         glove_embedding.load_to(model.src_embed, vocab.source)
 
-    print('begin training, %d training examples, %d dev examples' % (len(train_set), len(dev_set)), file=sys.stderr)
+    print('begin training, %d training examples(%.2f), %d dev examples' % (len(train_set), args.label_sample_ratio, len(dev_set)), file=sys.stderr)
     print('vocab: %s' % repr(vocab), file=sys.stderr)
 
     epoch = train_iter = 0
@@ -383,6 +385,8 @@ def train(args):
 
 def train_decoder(args):
     train_set = Dataset.from_bin_file(args.train_file)
+    num_labeled_examples = int(len(train_set)*args.label_sample_ratio)
+    train_set = Dataset(train_set.examples[:num_labeled_examples])
     dev_set = Dataset.from_bin_file(args.dev_file)
     vocab = pickle.load(open(args.vocab))
 
@@ -407,7 +411,7 @@ def train_decoder(args):
         model.train()
         return ppl
 
-    print('begin training decoder, %d training examples, %d dev examples' % (len(train_set), len(dev_set)), file=sys.stderr)
+    print('begin training decoder, %d training examples(%.2f), %d dev examples' % (len(train_set), args.label_sample_ratio, len(dev_set)), file=sys.stderr)
     print('vocab: %s' % repr(vocab), file=sys.stderr)
 
     epoch = train_iter = 0
